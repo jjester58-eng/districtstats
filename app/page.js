@@ -99,50 +99,66 @@ export default function HomePage() {
     }
 
     return (
-        <div style={{ padding: 20 }}>
-            <h1>Football Stats</h1>
+        <div className="container">
+            <div className="hero">
+                <h1>District Football Stats</h1>
+                <p>Track and analyze football performance across your district</p>
+            </div>
 
-            <div style={{ marginBottom: 30 }}>
+            <div className="auth-section">
                 {user ? (
-                    <div>
-                        <p>Signed in as <strong>{user.email}</strong> (ID: {user.id})</p>
-                        <button onClick={handleSignOut}>Sign Out</button>
+                    <div className="user-info">
+                        <h2>Welcome back!</h2>
+                        <p>Signed in as <strong>{user.email}</strong></p>
+                        <button className="btn btn-secondary" onClick={handleSignOut}>Sign Out</button>
                     </div>
                 ) : (
-                    <form onSubmit={handleSignIn} style={{ display: "grid", gap: 10, maxWidth: 320 }}>
-                        <h2>Sign in to Supabase</h2>
-                        <input
-                            type="email"
-                            placeholder="Email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            required
-                        />
-                        <input
-                            type="password"
-                            placeholder="Password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                        />
-                        <button type="submit">Sign In</button>
-                        <button type="button" onClick={handleSignUp}>Create Account</button>
-                        {authMessage && <p>{authMessage}</p>}
+                    <form onSubmit={handleSignIn}>
+                        <h2>Sign In</h2>
+                        <div className="form-group">
+                            <input
+                                type="email"
+                                placeholder="Email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div className="form-group">
+                            <input
+                                type="password"
+                                placeholder="Password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <button type="submit" className="btn">Sign In</button>
+                        <button type="button" className="btn btn-secondary" onClick={handleSignUp}>Create Account</button>
+                        {authMessage && (
+                            <div className={`message ${authMessage.includes('error') || authMessage.includes('Unable') ? 'error' : 'success'}`}>
+                                {authMessage}
+                            </div>
+                        )}
                     </form>
                 )}
             </div>
 
-            {schools.length === 0 ? (
-                <Link href="/school/weatherford">
-                    <button>Go to Weatherford High School</button>
-                </Link>
-            ) : (
-                schools.map(s => (
-                    <div key={s.id}>
-                        <Link href={`/school/${s.id}`}>{s.name}</Link>
-                    </div>
-                ))
-            )}
+            <div className="schools-grid">
+                {schools.length === 0 ? (
+                    <Link href="/school/weatherford" className="school-card">
+                        <h3>Weatherford High School</h3>
+                        <p>View football stats and performance data</p>
+                    </Link>
+                ) : (
+                    schools.map(s => (
+                        <Link key={s.id} href={`/school/${s.id}`} className="school-card">
+                            <h3>{s.name}</h3>
+                            <p>View football stats and performance data</p>
+                        </Link>
+                    ))
+                )}
+            </div>
         </div>
     );
 }
