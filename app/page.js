@@ -153,6 +153,13 @@ export default function HomePage() {
                 ) : (
                     schools.map(s => (
                         <Link key={s.id} href={`/school/${s.id}`} className="school-card">
+                            {s.logo_url && (
+                                <img 
+                                    src={s.logo_url} 
+                                    alt={`${s.name} logo`}
+                                    className="school-logo"
+                                />
+                            )}
                             <h3>{s.name}</h3>
                             <p>View football stats and performance data</p>
                         </Link>

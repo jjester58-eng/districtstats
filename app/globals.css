@@ -112,6 +112,7 @@ body {
     text-decoration: none;
     color: #333;
     display: block;
+    text-align: center;
 }
 
 .school-card:hover {
@@ -119,6 +120,14 @@ body {
     box-shadow: 0 15px 30px rgba(0,0,0,0.2);
     text-decoration: none;
     color: #333;
+}
+
+.school-logo {
+    width: 80px;
+    height: 80px;
+    object-fit: contain;
+    margin-bottom: 15px;
+    border-radius: 8px;
 }
 
 .school-card h3 {

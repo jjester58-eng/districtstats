@@ -86,9 +86,22 @@ export default function SchoolPage({ params }) {
     }
 
     async function loadSchoolLogo() {
+        // First try to get logo from schools table
+        const { data: schoolData } = await supabase
+            .from('schools')
+            .select('logo_url')
+            .eq('id', params.id)
+            .single();
+
+        if (schoolData?.logo_url) {
+            setSchoolLogo(schoolData.logo_url);
+            return;
+        }
+
+        // Fallback: look for logo file in storage (for backward compatibility)
         const { data } = await supabase.storage
             .from('logos')
-            .list('', { search: 'weatherford-logo' });
+            .list('', { search: `${params.id}-logo` });
 
         if (data && data.length > 0) {
             const { data: urlData } = supabase.storage
@@ -125,14 +138,30 @@ export default function SchoolPage({ params }) {
         if (!logoFile) return;
 
         const fileExt = logoFile.name.split('.').pop();
-        const fileName = `weatherford-logo.${fileExt}`;
+        const fileName = `${params.id}-logo.${fileExt}`;
 
-        const { error } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
             .from('logos')
             .upload(fileName, logoFile, { upsert: true });
 
-        if (error) {
-            alert('Error uploading logo: ' + error.message);
+        if (uploadError) {
+            alert('Error uploading logo: ' + uploadError.message);
+            return;
+        }
+
+        // Get the public URL
+        const { data: urlData } = supabase.storage
+            .from('logos')
+            .getPublicUrl(fileName);
+
+        // Update the schools table with the logo URL
+        const { error: updateError } = await supabase
+            .from('schools')
+            .update({ logo_url: urlData.publicUrl })
+            .eq('id', params.id);
+
+        if (updateError) {
+            alert('Logo uploaded but failed to update school record: ' + updateError.message);
         } else {
             alert('Logo uploaded successfully!');
             loadSchoolLogo();
