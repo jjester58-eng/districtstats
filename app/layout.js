@@ -1,6 +1,8 @@
+import './globals.css';
+
 export const metadata = {
-    title: "Weatherford Stats",
-    description: "Weatherford Football Stats App"
+    title: "District Football Stats",
+    description: "Track and analyze football performance across your district"
 };
 
 export default function RootLayout({ children }) {
