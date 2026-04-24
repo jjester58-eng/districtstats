@@ -20,12 +20,24 @@ export default function SchoolPage({ params }) {
 
     const [logoFile, setLogoFile] = useState(null);
     const [rosterFile, setRosterFile] = useState(null);
+    const [authUserId, setAuthUserId] = useState(null);
 
     useEffect(() => {
+        getUser();
         loadRoster();
         loadGames();
         loadSchoolLogo();
     }, []);
+
+    async function getUser() {
+        const { data, error } = await supabase.auth.getUser();
+        const userId = data?.user?.id;
+        console.log("Authenticated user ID:", userId);
+        if (error) {
+            console.error("Auth getUser error:", error);
+        }
+        setAuthUserId(userId ?? null);
+    }
 
     useEffect(() => {
         if (roster.length > 0 && selectedGame) {
