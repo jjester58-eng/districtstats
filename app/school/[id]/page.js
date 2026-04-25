@@ -23,7 +23,7 @@ export default function SchoolPage({ params }) {
 
     const [logoFile, setLogoFile] = useState(null);
     const [rosterFile, setRosterFile] = useState(null);
-    const [authUserId, setAuthUserId] = useState(null);
+    const [dominantColor, setDominantColor] = useState(null);
 
     useEffect(() => {
         getUser();
@@ -98,6 +98,8 @@ export default function SchoolPage({ params }) {
 
         if (schoolData?.logo_url) {
             setSchoolLogo(schoolData.logo_url);
+            const color = await extractColors(schoolData.logo_url);
+            setDominantColor(color);
             return;
         }
 
@@ -111,6 +113,8 @@ export default function SchoolPage({ params }) {
                 .from('logos')
                 .getPublicUrl(data[0].name);
             setSchoolLogo(urlData.publicUrl);
+            const color = await extractColors(urlData.publicUrl);
+            setDominantColor(color);
         }
     }
 
@@ -202,6 +206,39 @@ export default function SchoolPage({ params }) {
         setGameForm({ game_date: '', opponent: '', home: true });
         setEditingAthlete(null);
         setEditingGame(null);
+    }
+
+    async function extractColors(imgSrc) {
+        try {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.src = imgSrc;
+            await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
+            });
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            let r = 0, g = 0, b = 0, count = 0;
+            for (let i = 0; i < data.length; i += 4) {
+                r += data[i];
+                g += data[i + 1];
+                b += data[i + 2];
+                count++;
+            }
+            r = Math.floor(r / count);
+            g = Math.floor(g / count);
+            b = Math.floor(b / count);
+            return `rgb(${r}, ${g}, ${b})`;
+        } catch (error) {
+            console.error('Error extracting colors:', error);
+            return null;
+        }
     }
 
     async function uploadLogo(e) {
@@ -314,7 +351,7 @@ export default function SchoolPage({ params }) {
     }
 
     return (
-        <div style={{ padding: 20 }}>
+        <div style={{ padding: 20, backgroundColor: dominantColor ? `rgba(${dominantColor.match(/\d+/g).join(',')}, 0.05)` : 'white', minHeight: '100vh' }}>
             <Link href="/">
                 <button style={{ marginBottom: 20 }}>← Back to Schools</button>
             </Link>
@@ -322,7 +359,7 @@ export default function SchoolPage({ params }) {
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20 }}>
                 {schoolLogo && (
                     <img src={schoolLogo} alt="School Logo"
-                        style={{ width: 80, height: 80, marginRight: 20 }} />
+                        style={{ width: 100, height: 100, objectFit: 'contain', marginRight: 20, borderRadius: 8 }} />
                 )}
                 <h1>Weatherford High School Football</h1>
             </div>
