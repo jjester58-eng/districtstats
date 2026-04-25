@@ -18,6 +18,9 @@ export default function SchoolPage({ params }) {
         game_date: '', opponent: '', home: true
     });
 
+    const [editingAthlete, setEditingAthlete] = useState(null);
+    const [editingGame, setEditingGame] = useState(null);
+
     const [logoFile, setLogoFile] = useState(null);
     const [rosterFile, setRosterFile] = useState(null);
     const [authUserId, setAuthUserId] = useState(null);
@@ -113,28 +116,100 @@ export default function SchoolPage({ params }) {
 
     async function addAthlete(e) {
         e.preventDefault();
+        if (!authUserId) {
+            alert('You must be logged in to add athletes');
+            return;
+        }
         const { error } = await supabase.from("athletes").insert([athleteForm]);
         if (error) {
             alert('Error adding athlete: ' + error.message);
         } else {
             setAthleteForm({ number: '', first_name: '', last_name: '', position: '' });
+            setEditingAthlete(null);
+            loadRoster();
+        }
+    }
+
+    async function updateAthlete(e) {
+        e.preventDefault();
+        if (!authUserId) {
+            alert('You must be logged in to edit athletes');
+            return;
+        }
+        const { error } = await supabase.from("athletes").update(athleteForm).eq("id", editingAthlete);
+        if (error) {
+            alert('Error updating athlete: ' + error.message);
+        } else {
+            setAthleteForm({ number: '', first_name: '', last_name: '', position: '' });
+            setEditingAthlete(null);
             loadRoster();
         }
     }
 
     async function addGame(e) {
         e.preventDefault();
+        if (!authUserId) {
+            alert('You must be logged in to add games');
+            return;
+        }
         const { error } = await supabase.from("games").insert([gameForm]);
         if (error) {
             alert('Error adding game: ' + error.message);
         } else {
             setGameForm({ game_date: '', opponent: '', home: true });
+            setEditingGame(null);
             loadGames();
         }
     }
 
+    async function updateGame(e) {
+        e.preventDefault();
+        if (!authUserId) {
+            alert('You must be logged in to edit games');
+            return;
+        }
+        const { error } = await supabase.from("games").update(gameForm).eq("id", editingGame);
+        if (error) {
+            alert('Error updating game: ' + error.message);
+        } else {
+            setGameForm({ game_date: '', opponent: '', home: true });
+            setEditingGame(null);
+            loadGames();
+        }
+    }
+
+    function startEditingAthlete(athlete) {
+        setAthleteForm({
+            number: athlete.number,
+            first_name: athlete.first_name,
+            last_name: athlete.last_name,
+            position: athlete.position
+        });
+        setEditingAthlete(athlete.id);
+    }
+
+    function startEditingGame(game) {
+        setGameForm({
+            game_date: game.game_date,
+            opponent: game.opponent,
+            home: game.home
+        });
+        setEditingGame(game.id);
+    }
+
+    function cancelEdit() {
+        setAthleteForm({ number: '', first_name: '', last_name: '', position: '' });
+        setGameForm({ game_date: '', opponent: '', home: true });
+        setEditingAthlete(null);
+        setEditingGame(null);
+    }
+
     async function uploadLogo(e) {
         e.preventDefault();
+        if (!authUserId) {
+            alert('You must be logged in to upload logo');
+            return;
+        }
         if (!logoFile) return;
 
         const fileExt = logoFile.name.split('.').pop();
@@ -171,6 +246,10 @@ export default function SchoolPage({ params }) {
 
     async function uploadRoster(e) {
         e.preventDefault();
+        if (!authUserId) {
+            alert('You must be logged in to upload roster');
+            return;
+        }
         if (!rosterFile) return;
 
         const text = await rosterFile.text();
@@ -196,6 +275,10 @@ export default function SchoolPage({ params }) {
 
     async function savePlayerStats(e) {
         e.preventDefault();
+        if (!authUserId) {
+            alert('You must be logged in to save stats');
+            return;
+        }
         if (!selectedGame) return;
 
         const statsToSave = Object.entries(statsForm).filter(
@@ -263,8 +346,8 @@ export default function SchoolPage({ params }) {
                 </form>
             </div>
 
-            <h2>Add Athlete</h2>
-            <form onSubmit={addAthlete} style={{ marginBottom: 20 }}>
+            <h2>{editingAthlete ? 'Edit Athlete' : 'Add Athlete'}</h2>
+            <form onSubmit={editingAthlete ? updateAthlete : addAthlete} style={{ marginBottom: 20 }}>
                 <input type="number" placeholder="Number" value={athleteForm.number}
                     onChange={(e) => setAthleteForm({...athleteForm, number: e.target.value})} required />
                 <input type="text" placeholder="First Name" value={athleteForm.first_name}
@@ -273,11 +356,12 @@ export default function SchoolPage({ params }) {
                     onChange={(e) => setAthleteForm({...athleteForm, last_name: e.target.value})} required />
                 <input type="text" placeholder="Position" value={athleteForm.position}
                     onChange={(e) => setAthleteForm({...athleteForm, position: e.target.value})} required />
-                <button type="submit">Add Athlete</button>
+                <button type="submit">{editingAthlete ? 'Update Athlete' : 'Add Athlete'}</button>
+                {editingAthlete && <button type="button" onClick={cancelEdit}>Cancel</button>}
             </form>
 
-            <h2>Add Game</h2>
-            <form onSubmit={addGame} style={{ marginBottom: 20 }}>
+            <h2>{editingGame ? 'Edit Game' : 'Add Game'}</h2>
+            <form onSubmit={editingGame ? updateGame : addGame} style={{ marginBottom: 20 }}>
                 <input type="date" value={gameForm.game_date}
                     onChange={(e) => setGameForm({...gameForm, game_date: e.target.value})} required />
                 <input type="text" placeholder="Opponent" value={gameForm.opponent}
@@ -287,17 +371,24 @@ export default function SchoolPage({ params }) {
                         onChange={(e) => setGameForm({...gameForm, home: e.target.checked})} />
                     Home Game
                 </label>
-                <button type="submit">Add Game</button>
+                <button type="submit">{editingGame ? 'Update Game' : 'Add Game'}</button>
+                {editingGame && <button type="button" onClick={cancelEdit}>Cancel</button>}
             </form>
 
             <h2>Roster</h2>
             {roster.map(a => (
-                <div key={a.id}>{a.number} — {a.first_name} {a.last_name} ({a.position})</div>
+                <div key={a.id} style={{ marginBottom: 5 }}>
+                    {a.number} — {a.first_name} {a.last_name} ({a.position})
+                    <button onClick={() => startEditingAthlete(a)} style={{ marginLeft: 10 }}>Edit</button>
+                </div>
             ))}
 
             <h2>Games</h2>
             {games.map(g => (
-                <div key={g.id}>{g.game_date} vs {g.opponent} ({g.home ? "Home" : "Away"})</div>
+                <div key={g.id} style={{ marginBottom: 5 }}>
+                    {g.game_date} vs {g.opponent} ({g.home ? "Home" : "Away"})
+                    <button onClick={() => startEditingGame(g)} style={{ marginLeft: 10 }}>Edit</button>
+                </div>
             ))}
 
             <h2>Enter Game Stats</h2>
