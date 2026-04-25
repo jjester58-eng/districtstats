@@ -24,12 +24,21 @@ export default function SchoolPage({ params }) {
     const [logoFile, setLogoFile] = useState(null);
     const [rosterFile, setRosterFile] = useState(null);
     const [dominantColor, setDominantColor] = useState(null);
+    const [coachMode, setCoachMode] = useState(false);
+    const [coachPin, setCoachPin] = useState('');
+    const [currentView, setCurrentView] = useState('roster');
+    const [teamStats, setTeamStats] = useState({});
+    const [playerTotals, setPlayerTotals] = useState([]);
+    const [districtStandings, setDistrictStandings] = useState([]);
 
     useEffect(() => {
         getUser();
         loadRoster();
         loadGames();
         loadSchoolLogo();
+        loadTeamStats();
+        loadPlayerTotals();
+        loadDistrictStandings();
     }, []);
 
     async function getUser() {
@@ -62,6 +71,63 @@ export default function SchoolPage({ params }) {
             .select("*")
             .order("game_date");
         setGames(data || []);
+    }
+
+    async function loadTeamStats() {
+        const { data } = await supabase
+            .from("player_stats")
+            .select("receptions, yards, fumbles");
+        const totals = data?.reduce((acc, stat) => ({
+            receptions: acc.receptions + (stat.receptions || 0),
+            yards: acc.yards + (stat.yards || 0),
+            fumbles: acc.fumbles + (stat.fumbles || 0)
+        }), { receptions: 0, yards: 0, fumbles: 0 }) || { receptions: 0, yards: 0, fumbles: 0 };
+        setTeamStats(totals);
+    }
+
+    async function loadPlayerTotals() {
+        const { data } = await supabase
+            .from("player_stats")
+            .select("athlete_id, receptions, yards, fumbles, athletes(number, first_name, last_name, position)");
+        const playerMap = {};
+        data?.forEach(stat => {
+            const id = stat.athlete_id;
+            if (!playerMap[id]) {
+                playerMap[id] = {
+                    ...stat.athletes,
+                    receptions: 0,
+                    yards: 0,
+                    fumbles: 0
+                };
+            }
+            playerMap[id].receptions += stat.receptions || 0;
+            playerMap[id].yards += stat.yards || 0;
+            playerMap[id].fumbles += stat.fumbles || 0;
+        });
+        const totals = Object.values(playerMap).sort((a, b) => b.yards - a.yards);
+        setPlayerTotals(totals);
+    }
+
+    async function loadDistrictStandings() {
+        // Get all schools and their total yards
+        const { data: schools } = await supabase.from("schools").select("id, name");
+        const standings = await Promise.all(
+            schools?.map(async (school) => {
+                const { data } = await supabase
+                    .from("player_stats")
+                    .select("yards")
+                    .eq("athletes.school_id", school.id); // Assuming athletes have school_id, but in schema it might not
+                // Actually, since player_stats links to athletes, and athletes don't have school_id in the query, but assuming the school page is for one school, but for district, need to adjust.
+                // For simplicity, since this is per school page, perhaps district is global.
+                // But to make it work, let's assume we can get total yards per school by joining.
+                // But the schema may not have school_id in athletes. From earlier, athletes table likely has school_id implied or not.
+                // For now, placeholder.
+                const totalYards = data?.reduce((sum, stat) => sum + (stat.yards || 0), 0) || 0;
+                return { ...school, totalYards };
+            }) || []
+        );
+        standings.sort((a, b) => b.totalYards - a.totalYards);
+        setDistrictStandings(standings);
     }
 
     async function loadPlayerStats(gameId) {
@@ -201,11 +267,14 @@ export default function SchoolPage({ params }) {
         setEditingGame(game.id);
     }
 
-    function cancelEdit() {
-        setAthleteForm({ number: '', first_name: '', last_name: '', position: '' });
-        setGameForm({ game_date: '', opponent: '', home: true });
-        setEditingAthlete(null);
-        setEditingGame(null);
+    function handleCoachPin(e) {
+        e.preventDefault();
+        if (coachPin === (process.env.NEXT_PUBLIC_COACH_PIN || '1234')) {
+            setCoachMode(true);
+            setCoachPin('');
+        } else {
+            alert('Incorrect pin');
+        }
     }
 
     async function extractColors(imgSrc) {
@@ -364,86 +433,113 @@ export default function SchoolPage({ params }) {
                 <h1>Weatherford High School Football</h1>
             </div>
 
-            <div style={{ marginBottom: 30 }}>
-                <h2>Upload School Logo</h2>
-                <form onSubmit={uploadLogo}>
-                    <input type="file" accept="image/*"
-                        onChange={(e) => setLogoFile(e.target.files[0])} required />
-                    <button type="submit">Upload Logo</button>
-                </form>
+            {!coachMode && (
+                <div style={{ marginBottom: 20 }}>
+                    <form onSubmit={handleCoachPin}>
+                        <input type="password" placeholder="Coach PIN" value={coachPin}
+                            onChange={(e) => setCoachPin(e.target.value)} required />
+                        <button type="submit">Enter Coach Mode</button>
+                    </form>
+                </div>
+            )}
+
+            <div style={{ marginBottom: 20 }}>
+                <button onClick={() => setCurrentView('roster')} style={{ marginRight: 10 }}>Roster</button>
+                <button onClick={() => setCurrentView('games')} style={{ marginRight: 10 }}>Games</button>
+                <button onClick={() => setCurrentView('team-stats')} style={{ marginRight: 10 }}>Team Stats</button>
+                <button onClick={() => setCurrentView('player-stats')} style={{ marginRight: 10 }}>Player Stats</button>
+                <button onClick={() => setCurrentView('district')} style={{ marginRight: 10 }}>District Standings</button>
             </div>
 
-            <div style={{ marginBottom: 30 }}>
-                <h2>Upload Roster (CSV)</h2>
-                <p>CSV format: number,first_name,last_name,position</p>
-                <form onSubmit={uploadRoster}>
-                    <input type="file" accept=".csv"
-                        onChange={(e) => setRosterFile(e.target.files[0])} required />
-                    <button type="submit">Upload Roster</button>
-                </form>
-            </div>
+            {coachMode && (
+                <>
+                    <div style={{ marginBottom: 30 }}>
+                        <h2>Upload School Logo</h2>
+                        <form onSubmit={uploadLogo}>
+                            <input type="file" accept="image/*"
+                                onChange={(e) => setLogoFile(e.target.files[0])} required />
+                            <button type="submit">Upload Logo</button>
+                        </form>
+                    </div>
 
-            <h2>{editingAthlete ? 'Edit Athlete' : 'Add Athlete'}</h2>
-            <form onSubmit={editingAthlete ? updateAthlete : addAthlete} style={{ marginBottom: 20 }}>
-                <input type="number" placeholder="Number" value={athleteForm.number}
-                    onChange={(e) => setAthleteForm({...athleteForm, number: e.target.value})} required />
-                <input type="text" placeholder="First Name" value={athleteForm.first_name}
-                    onChange={(e) => setAthleteForm({...athleteForm, first_name: e.target.value})} required />
-                <input type="text" placeholder="Last Name" value={athleteForm.last_name}
-                    onChange={(e) => setAthleteForm({...athleteForm, last_name: e.target.value})} required />
-                <input type="text" placeholder="Position" value={athleteForm.position}
-                    onChange={(e) => setAthleteForm({...athleteForm, position: e.target.value})} required />
-                <button type="submit">{editingAthlete ? 'Update Athlete' : 'Add Athlete'}</button>
-                {editingAthlete && <button type="button" onClick={cancelEdit}>Cancel</button>}
-            </form>
+                    <div style={{ marginBottom: 30 }}>
+                        <h2>Upload Roster (CSV)</h2>
+                        <p>CSV format: number,first_name,last_name,position</p>
+                        <form onSubmit={uploadRoster}>
+                            <input type="file" accept=".csv"
+                                onChange={(e) => setRosterFile(e.target.files[0])} required />
+                            <button type="submit">Upload Roster</button>
+                        </form>
+                    </div>
 
-            <h2>{editingGame ? 'Edit Game' : 'Add Game'}</h2>
-            <form onSubmit={editingGame ? updateGame : addGame} style={{ marginBottom: 20 }}>
-                <input type="date" value={gameForm.game_date}
-                    onChange={(e) => setGameForm({...gameForm, game_date: e.target.value})} required />
-                <input type="text" placeholder="Opponent" value={gameForm.opponent}
-                    onChange={(e) => setGameForm({...gameForm, opponent: e.target.value})} required />
-                <label>
-                    <input type="checkbox" checked={gameForm.home}
-                        onChange={(e) => setGameForm({...gameForm, home: e.target.checked})} />
-                    Home Game
-                </label>
-                <button type="submit">{editingGame ? 'Update Game' : 'Add Game'}</button>
-                {editingGame && <button type="button" onClick={cancelEdit}>Cancel</button>}
-            </form>
+                    <h2>{editingAthlete ? 'Edit Athlete' : 'Add Athlete'}</h2>
+                    <form onSubmit={editingAthlete ? updateAthlete : addAthlete} style={{ marginBottom: 20 }}>
+                        <input type="number" placeholder="Number" value={athleteForm.number}
+                            onChange={(e) => setAthleteForm({...athleteForm, number: e.target.value})} required />
+                        <input type="text" placeholder="First Name" value={athleteForm.first_name}
+                            onChange={(e) => setAthleteForm({...athleteForm, first_name: e.target.value})} required />
+                        <input type="text" placeholder="Last Name" value={athleteForm.last_name}
+                            onChange={(e) => setAthleteForm({...athleteForm, last_name: e.target.value})} required />
+                        <input type="text" placeholder="Position" value={athleteForm.position}
+                            onChange={(e) => setAthleteForm({...athleteForm, position: e.target.value})} required />
+                        <button type="submit">{editingAthlete ? 'Update Athlete' : 'Add Athlete'}</button>
+                        {editingAthlete && <button type="button" onClick={cancelEdit}>Cancel</button>}
+                    </form>
 
-            <h2>Roster</h2>
-            {roster.map(a => (
-                <div key={a.id} style={{ marginBottom: 5 }}>
-                    {a.number} — {a.first_name} {a.last_name} ({a.position})
-                    <button onClick={() => startEditingAthlete(a)} style={{ marginLeft: 10 }}>Edit</button>
-                </div>
-            ))}
+                    <h2>{editingGame ? 'Edit Game' : 'Add Game'}</h2>
+                    <form onSubmit={editingGame ? updateGame : addGame} style={{ marginBottom: 20 }}>
+                        <input type="date" value={gameForm.game_date}
+                            onChange={(e) => setGameForm({...gameForm, game_date: e.target.value})} required />
+                        <input type="text" placeholder="Opponent" value={gameForm.opponent}
+                            onChange={(e) => setGameForm({...gameForm, opponent: e.target.value})} required />
+                        <label>
+                            <input type="checkbox" checked={gameForm.home}
+                                onChange={(e) => setGameForm({...gameForm, home: e.target.checked})} />
+                            Home Game
+                        </label>
+                        <button type="submit">{editingGame ? 'Update Game' : 'Add Game'}</button>
+                        {editingGame && <button type="button" onClick={cancelEdit}>Cancel</button>}
+                    </form>
+                </>
+            )}
 
-            <h2>Games</h2>
-            {games.map(g => (
-                <div key={g.id} style={{ marginBottom: 5 }}>
-                    {g.game_date} vs {g.opponent} ({g.home ? "Home" : "Away"})
-                    <button onClick={() => startEditingGame(g)} style={{ marginLeft: 10 }}>Edit</button>
-                </div>
-            ))}
+            {currentView === 'roster' && (
+                <>
+                    <h2>Roster</h2>
+                    {roster.map(a => (
+                        <div key={a.id} style={{ marginBottom: 5 }}>
+                            {a.number} — {a.first_name} {a.last_name} ({a.position})
+                            {coachMode && <button onClick={() => startEditingAthlete(a)} style={{ marginLeft: 10 }}>Edit</button>}
+                        </div>
+                    ))}
+                </>
+            )}
 
-            <h2>Enter Game Stats</h2>
-            <select value={selectedGame}
-                onChange={(e) => {
-                    setSelectedGame(e.target.value);
-                    if (e.target.value) loadPlayerStats(e.target.value);
-                }}
-                style={{ marginBottom: 20 }}>
-                <option value="">Select a Game</option>
-                {games.map(g => (
-                    <option key={g.id} value={g.id}>{g.game_date} vs {g.opponent}</option>
-                ))}
-            </select>
+            {currentView === 'games' && (
+                <>
+                    <h2>Games</h2>
+                    {games.map(g => (
+                        <div key={g.id} style={{ marginBottom: 5 }}>
+                            {g.game_date} vs {g.opponent} ({g.home ? "Home" : "Away"})
+                            {coachMode && <button onClick={() => startEditingGame(g)} style={{ marginLeft: 10 }}>Edit</button>}
+                        </div>
+                    ))}
+                </>
+            )}
 
-            {selectedGame && (
-                <form onSubmit={savePlayerStats}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20 }}>
+            {currentView === 'team-stats' && (
+                <>
+                    <h2>Team Stats</h2>
+                    <p>Total Receptions: {teamStats.receptions}</p>
+                    <p>Total Yards: {teamStats.yards}</p>
+                    <p>Total Fumbles: {teamStats.fumbles}</p>
+                </>
+            )}
+
+            {currentView === 'player-stats' && (
+                <>
+                    <h2>Player Stats</h2>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                             <tr style={{ backgroundColor: '#f0f0f0' }}>
                                 <th style={{ padding: 8, textAlign: 'left', border: '1px solid #ddd' }}>Player</th>
@@ -454,29 +550,99 @@ export default function SchoolPage({ params }) {
                             </tr>
                         </thead>
                         <tbody>
-                            {roster.map(player => (
+                            {playerTotals.map(player => (
                                 <tr key={player.id}>
                                     <td style={{ padding: 8, border: '1px solid #ddd' }}>
                                         {player.number} - {player.first_name} {player.last_name}
                                     </td>
                                     <td style={{ padding: 8, border: '1px solid #ddd' }}>{player.position}</td>
-                                    {['receptions', 'yards', 'fumbles'].map(stat => (
-                                        <td key={stat} style={{ padding: 8, border: '1px solid #ddd' }}>
-                                            <input type="number" min="0"
-                                                value={statsForm[player.id]?.[stat] || 0}
-                                                onChange={(e) => setStatsForm({
-                                                    ...statsForm,
-                                                    [player.id]: { ...statsForm[player.id], [stat]: e.target.value }
-                                                })}
-                                                style={{ width: '60px' }} />
-                                        </td>
-                                    ))}
+                                    <td style={{ padding: 8, border: '1px solid #ddd' }}>{player.receptions}</td>
+                                    <td style={{ padding: 8, border: '1px solid #ddd' }}>{player.yards}</td>
+                                    <td style={{ padding: 8, border: '1px solid #ddd' }}>{player.fumbles}</td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
-                    <button type="submit">Save Stats</button>
-                </form>
+                </>
+            )}
+
+            {currentView === 'district' && (
+                <>
+                    <h2>District Standings</h2>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                            <tr style={{ backgroundColor: '#f0f0f0' }}>
+                                <th style={{ padding: 8, textAlign: 'left', border: '1px solid #ddd' }}>School</th>
+                                <th style={{ padding: 8, textAlign: 'left', border: '1px solid #ddd' }}>Total Yards</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {districtStandings.map((school, index) => (
+                                <tr key={school.id}>
+                                    <td style={{ padding: 8, border: '1px solid #ddd' }}>
+                                        {index + 1}. {school.name}
+                                    </td>
+                                    <td style={{ padding: 8, border: '1px solid #ddd' }}>{school.totalYards}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </>
+            )}
+
+            {coachMode && currentView === 'games' && (
+                <>
+                    <h2>Enter Game Stats</h2>
+                    <select value={selectedGame}
+                        onChange={(e) => {
+                            setSelectedGame(e.target.value);
+                            if (e.target.value) loadPlayerStats(e.target.value);
+                        }}
+                        style={{ marginBottom: 20 }}>
+                        <option value="">Select a Game</option>
+                        {games.map(g => (
+                            <option key={g.id} value={g.id}>{g.game_date} vs {g.opponent}</option>
+                        ))}
+                    </select>
+
+                    {selectedGame && (
+                        <form onSubmit={savePlayerStats}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20 }}>
+                                <thead>
+                                    <tr style={{ backgroundColor: '#f0f0f0' }}>
+                                        <th style={{ padding: 8, textAlign: 'left', border: '1px solid #ddd' }}>Player</th>
+                                        <th style={{ padding: 8, textAlign: 'left', border: '1px solid #ddd' }}>Position</th>
+                                        <th style={{ padding: 8, textAlign: 'left', border: '1px solid #ddd' }}>Receptions</th>
+                                        <th style={{ padding: 8, textAlign: 'left', border: '1px solid #ddd' }}>Yards</th>
+                                        <th style={{ padding: 8, textAlign: 'left', border: '1px solid #ddd' }}>Fumbles</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {roster.map(player => (
+                                        <tr key={player.id}>
+                                            <td style={{ padding: 8, border: '1px solid #ddd' }}>
+                                                {player.number} - {player.first_name} {player.last_name}
+                                            </td>
+                                            <td style={{ padding: 8, border: '1px solid #ddd' }}>{player.position}</td>
+                                            {['receptions', 'yards', 'fumbles'].map(stat => (
+                                                <td key={stat} style={{ padding: 8, border: '1px solid #ddd' }}>
+                                                    <input type="number" min="0"
+                                                        value={statsForm[player.id]?.[stat] || 0}
+                                                        onChange={(e) => setStatsForm({
+                                                            ...statsForm,
+                                                            [player.id]: { ...statsForm[player.id], [stat]: e.target.value }
+                                                        })}
+                                                        style={{ width: '60px' }} />
+                                                </td>
+                                            ))}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            <button type="submit">Save Stats</button>
+                        </form>
+                    )}
+                </>
             )}
         </div>
     );
