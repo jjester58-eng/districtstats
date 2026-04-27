@@ -170,10 +170,11 @@ export default function SchoolPage({ params }) {
     }
 
     async function loadPlayerStats(gameId) {
+        const gameIdValue = parseInt(gameId, 10) || gameId;
         const { data } = await supabase
             .from("player_stats")
             .select("*, athletes(number, first_name, last_name, position)")
-            .eq("game_id", gameId);
+            .eq("game_id", gameIdValue);
 
         const statsMap = {};
         data?.forEach(stat => {
@@ -445,7 +446,8 @@ export default function SchoolPage({ params }) {
             return;
         }
 
-        await supabase.from("player_stats").delete().eq("game_id", selectedGame);
+        const selectedGameValue = parseInt(selectedGame, 10) || selectedGame;
+        await supabase.from("player_stats").delete().eq("game_id", selectedGameValue);
 
         const results = await Promise.all(
             statsToSave.map(([athleteId, stats]) =>
@@ -497,6 +499,7 @@ export default function SchoolPage({ params }) {
             <div style={{ marginBottom: 20 }}>
                 <button onClick={() => setCurrentView('roster')} style={{ marginRight: 10 }}>Roster</button>
                 <button onClick={() => setCurrentView('games')} style={{ marginRight: 10 }}>Games</button>
+                <button onClick={() => setCurrentView('enter-stats')} style={{ marginRight: 10 }}>Enter Stats</button>
                 <button onClick={() => setCurrentView('team-stats')} style={{ marginRight: 10 }}>Team Stats</button>
                 <button onClick={() => setCurrentView('player-stats')} style={{ marginRight: 10 }}>Player Stats</button>
                 <button onClick={() => setCurrentView('district')} style={{ marginRight: 10 }}>District Standings</button>
@@ -569,6 +572,7 @@ export default function SchoolPage({ params }) {
             {currentView === 'games' && (
                 <>
                     <h2>Games</h2>
+                    <p>Use the Enter Stats tab to add or update stats for a selected game.</p>
                     {games.map(g => (
                         <div key={g.id} style={{ marginBottom: 5 }}>
                             {g.game_date} vs {g.opponent} ({g.home ? "Home" : "Away"})
@@ -643,7 +647,7 @@ export default function SchoolPage({ params }) {
                 </>
             )}
 
-            {coachMode && currentView === 'games' && (
+            {coachMode && currentView === 'enter-stats' && (
                 <>
                     <h2>Enter Game Stats</h2>
                     <select value={selectedGame}
