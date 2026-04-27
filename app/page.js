@@ -9,6 +9,7 @@ export default function HomePage() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [user, setUser] = useState(null);
+    const [authMessage, setAuthMessage] = useState("");
     const [resendEmail, setResendEmail] = useState("");
 
     useEffect(() => {
