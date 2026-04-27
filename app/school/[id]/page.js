@@ -30,6 +30,45 @@ export default function SchoolPage({ params }) {
     const [teamStats, setTeamStats] = useState({});
     const [playerTotals, setPlayerTotals] = useState([]);
     const [districtStandings, setDistrictStandings] = useState([]);
+    const [authUserId, setAuthUserId] = useState(null);
+
+    const OFFENSIVE_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'FB', 'HB', 'OL', 'K', 'P'];
+    const DEFENSIVE_POSITIONS = ['DL', 'DE', 'DT', 'LB', 'CB', 'S', 'SS', 'FS', 'MLB', 'OLB', 'DB'];
+
+    function getStatCategory(position) {
+        const normalized = (position || '').toUpperCase().trim();
+        if (OFFENSIVE_POSITIONS.includes(normalized)) return 'Offense';
+        if (DEFENSIVE_POSITIONS.includes(normalized)) return 'Defense';
+        return 'Unknown';
+    }
+
+    function getPlayerTotalsMap() {
+        return playerTotals.reduce((map, player) => {
+            if (player?.id) map[player.id] = player;
+            return map;
+        }, {});
+    }
+
+    function sortRosterForStats(players) {
+        const totalsMap = getPlayerTotalsMap();
+        return [...players].sort((a, b) => {
+            const aStats = statsForm[a.id] || {};
+            const bStats = statsForm[b.id] || {};
+            const aHasCurrent = (aStats.receptions > 0 || aStats.yards > 0 || aStats.fumbles > 0) ? 1 : 0;
+            const bHasCurrent = (bStats.receptions > 0 || bStats.yards > 0 || bStats.fumbles > 0) ? 1 : 0;
+            if (aHasCurrent !== bHasCurrent) return bHasCurrent - aHasCurrent;
+
+            const aHasAny = totalsMap[a.id] ? 1 : 0;
+            const bHasAny = totalsMap[b.id] ? 1 : 0;
+            if (aHasAny !== bHasAny) return bHasAny - aHasAny;
+
+            const aOffense = OFFENSIVE_POSITIONS.includes((a.position || '').toUpperCase()) ? 1 : 0;
+            const bOffense = OFFENSIVE_POSITIONS.includes((b.position || '').toUpperCase()) ? 1 : 0;
+            if (aOffense !== bOffense) return bOffense - aOffense;
+
+            return (a.number || 0) - (b.number || 0);
+        });
+    }
 
     useEffect(() => {
         getUser();
@@ -267,6 +306,16 @@ export default function SchoolPage({ params }) {
         setEditingGame(game.id);
     }
 
+    function cancelAthleteEdit() {
+        setAthleteForm({ number: '', first_name: '', last_name: '', position: '' });
+        setEditingAthlete(null);
+    }
+
+    function cancelGameEdit() {
+        setGameForm({ game_date: '', opponent: '', home: true });
+        setEditingGame(null);
+    }
+
     function handleCoachPin(e) {
         e.preventDefault();
         if (coachPin === (process.env.NEXT_PUBLIC_COACH_PIN || '1234')) {
@@ -419,6 +468,8 @@ export default function SchoolPage({ params }) {
         }
     }
 
+    const rosterForStats = selectedGame ? sortRosterForStats(roster) : roster;
+
     return (
         <div style={{ padding: 20, backgroundColor: dominantColor ? `rgba(${dominantColor.match(/\d+/g).join(',')}, 0.05)` : 'white', minHeight: '100vh' }}>
             <Link href="/">
@@ -483,7 +534,7 @@ export default function SchoolPage({ params }) {
                         <input type="text" placeholder="Position" value={athleteForm.position}
                             onChange={(e) => setAthleteForm({...athleteForm, position: e.target.value})} required />
                         <button type="submit">{editingAthlete ? 'Update Athlete' : 'Add Athlete'}</button>
-                        {editingAthlete && <button type="button" onClick={cancelEdit}>Cancel</button>}
+                        {editingAthlete && <button type="button" onClick={cancelAthleteEdit}>Cancel</button>}
                     </form>
 
                     <h2>{editingGame ? 'Edit Game' : 'Add Game'}</h2>
@@ -498,7 +549,7 @@ export default function SchoolPage({ params }) {
                             Home Game
                         </label>
                         <button type="submit">{editingGame ? 'Update Game' : 'Add Game'}</button>
-                        {editingGame && <button type="button" onClick={cancelEdit}>Cancel</button>}
+                        {editingGame && <button type="button" onClick={cancelGameEdit}>Cancel</button>}
                     </form>
                 </>
             )}
@@ -544,6 +595,7 @@ export default function SchoolPage({ params }) {
                             <tr style={{ backgroundColor: '#f0f0f0' }}>
                                 <th style={{ padding: 8, textAlign: 'left', border: '1px solid #ddd' }}>Player</th>
                                 <th style={{ padding: 8, textAlign: 'left', border: '1px solid #ddd' }}>Position</th>
+                                <th style={{ padding: 8, textAlign: 'left', border: '1px solid #ddd' }}>Category</th>
                                 <th style={{ padding: 8, textAlign: 'left', border: '1px solid #ddd' }}>Receptions</th>
                                 <th style={{ padding: 8, textAlign: 'left', border: '1px solid #ddd' }}>Yards</th>
                                 <th style={{ padding: 8, textAlign: 'left', border: '1px solid #ddd' }}>Fumbles</th>
@@ -556,6 +608,7 @@ export default function SchoolPage({ params }) {
                                         {player.number} - {player.first_name} {player.last_name}
                                     </td>
                                     <td style={{ padding: 8, border: '1px solid #ddd' }}>{player.position}</td>
+                                    <td style={{ padding: 8, border: '1px solid #ddd' }}>{getStatCategory(player.position)}</td>
                                     <td style={{ padding: 8, border: '1px solid #ddd' }}>{player.receptions}</td>
                                     <td style={{ padding: 8, border: '1px solid #ddd' }}>{player.yards}</td>
                                     <td style={{ padding: 8, border: '1px solid #ddd' }}>{player.fumbles}</td>
@@ -612,18 +665,20 @@ export default function SchoolPage({ params }) {
                                     <tr style={{ backgroundColor: '#f0f0f0' }}>
                                         <th style={{ padding: 8, textAlign: 'left', border: '1px solid #ddd' }}>Player</th>
                                         <th style={{ padding: 8, textAlign: 'left', border: '1px solid #ddd' }}>Position</th>
+                                        <th style={{ padding: 8, textAlign: 'left', border: '1px solid #ddd' }}>Category</th>
                                         <th style={{ padding: 8, textAlign: 'left', border: '1px solid #ddd' }}>Receptions</th>
                                         <th style={{ padding: 8, textAlign: 'left', border: '1px solid #ddd' }}>Yards</th>
                                         <th style={{ padding: 8, textAlign: 'left', border: '1px solid #ddd' }}>Fumbles</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {roster.map(player => (
+                                    {rosterForStats.map(player => (
                                         <tr key={player.id}>
                                             <td style={{ padding: 8, border: '1px solid #ddd' }}>
                                                 {player.number} - {player.first_name} {player.last_name}
                                             </td>
                                             <td style={{ padding: 8, border: '1px solid #ddd' }}>{player.position}</td>
+                                            <td style={{ padding: 8, border: '1px solid #ddd' }}>{getStatCategory(player.position)}</td>
                                             {['receptions', 'yards', 'fumbles'].map(stat => (
                                                 <td key={stat} style={{ padding: 8, border: '1px solid #ddd' }}>
                                                     <input type="number" min="0"
